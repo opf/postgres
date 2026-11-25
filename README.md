@@ -32,15 +32,14 @@ make build
 docker images openproject/postgres
 
 # Start the server
-docker run --rm --name postgres-test -e POSTGRES_PASSWORD=secret -p 5432:5432 {openproject/postgres:19.0-pgvector-0.8.7}
+docker run --rm --name postgres-test -e POSTGRES_PASSWORD=secret -p 5432:5432 openproject/postgres:19
 
 # Start a client
 psql 'postgresql://postgres:secret@localhost:5432'
 ```
 
-Verify that the expected tools are included:
+Verify that the expected tools are included (Example output for Postgres 19.0 and pgvector-0.8.7):
 
-(Example output for Postgres 19.0 and pgvector-0.8.7
 ```sql
 postgres=# SELECT version();
                                                          version

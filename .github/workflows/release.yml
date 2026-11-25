@@ -80,7 +80,7 @@ jobs:
         id: tags
         run: |
           SHORT="${{ env.REGISTRY_IMAGE }}:${{ steps.versions.outputs.postgres_major }}"
-          FULL="${{ env.REGISTRY_IMAGE }}:${{ steps.versions.outputs.postgres_major }}-pgvector-${{ steps.versions.outputs.pgvector_version }}"
+          FULL="${{ env.REGISTRY_IMAGE }}:${{ steps.versions.outputs.postgres_version }}-pgvector-${{ steps.versions.outputs.pgvector_version }}"
 
           cat <<EOF >> "$GITHUB_OUTPUT"
           short=$SHORT
