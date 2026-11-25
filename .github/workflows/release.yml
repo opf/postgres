@@ -6,8 +6,10 @@ on:
       - main
 
   schedule:
-    # Run daily at midnight UTC
-    - cron: "0 0 * * *"
+    # _/postgres updates are triggered automatically every Sunday at midnight.
+    # However there may be intermediate updates which are triggered manually. If
+    # we're building at 2am each day, we should be fairly up-to-date.
+    - cron: "0 2 * * *"
 
   workflow_dispatch:
 
@@ -15,12 +17,15 @@ concurrency:
   group: docker-release-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 env:
   REGISTRY_IMAGE: openproject/postgres
 
 jobs:
   build:
-    name: Build (version ${{ matrix.pg_major }})
+    name: Release ${{ env.REGISTRY_IMAGE }}:v${{ matrix.pg_major }}
     runs-on: ubuntu-latest
 
     strategy:

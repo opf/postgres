@@ -21,6 +21,15 @@ It's built for multiple platforms:
 - arm64
 - amd64
 
+## Release schedule
+
+The images created by this project will be rebuilt and published on a daily
+basis. They are based on mutable images published by the PostgreSQL community,
+therefore they will receive actual changes whenever a new base image is
+published. This typically happens on a weekly schedule. However they may occur
+more frequently for various reasons. These updates may include updates of
+PostgreSQL, PGVector, or the underlying operating system.
+
 
 ## Test the build locally
 
