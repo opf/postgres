@@ -4,7 +4,7 @@ set -euo pipefail
 PG_MAJOR="${PG_MAJOR:-19}"
 DEBIAN_CODENAME="${DEBIAN_CODENAME:-trixie}"
 
-BASE_IMAGE="postgres:${PG_MAJOR}-${DEBIAN_CODENAME}"
+BASE_IMAGE="${BASE_IMAGE:-postgres:${PG_MAJOR}-${DEBIAN_CODENAME}}"
 PACKAGE="postgresql-${PG_MAJOR}-pgvector"
 
 docker run --rm --entrypoint sh "$BASE_IMAGE" -c "

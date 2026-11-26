@@ -23,12 +23,18 @@ It's built for multiple platforms:
 
 ## Release schedule
 
-The images created by this project will be rebuilt and published on a daily
-basis. They are based on mutable images published by the PostgreSQL community,
+The images created by this project are checked for updates on a daily basis.
+They are based on mutable images published by the PostgreSQL community,
 therefore they will receive actual changes whenever a new base image is
 published. This typically happens on a weekly schedule. However they may occur
 more frequently for various reasons. These updates may include updates of
 PostgreSQL, PGVector, or the underlying operating system.
+
+A new image is only pushed if the upstream base image digest or the pgvector
+package version changed since the last release. Both are recorded as image
+labels (`org.opencontainers.image.base.digest` and
+`com.openproject.pgvector.version`). Pushes to `main` and manual workflow runs
+always rebuild and publish.
 
 
 ## Test the build locally

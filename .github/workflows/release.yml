@@ -52,11 +52,32 @@ jobs:
           username: openprojectci
           password: ${{ secrets.DOCKER_HUB_OPENPROJECTCI_PAT }}
 
+      - name: Resolve base image digest
+        id: base
+        env:
+          BASE_NAME: postgres:${{ matrix.pg_major }}-${{ matrix.debian_codename }}
+        run: |
+          set -euo pipefail
+
+          DIGEST="$(docker buildx imagetools inspect "$BASE_NAME" --format '{{.Manifest.Digest}}')"
+
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Could not resolve digest of $BASE_NAME (got: '$DIGEST')."
+            exit 1
+          fi
+
+          cat <<EOF >> "$GITHUB_OUTPUT"
+          name=$BASE_NAME
+          digest=$DIGEST
+          image=$BASE_NAME@$DIGEST
+          EOF
+
       - name: Get versions
         id: versions
         env:
           PG_MAJOR: ${{ matrix.pg_major }}
           DEBIAN_CODENAME: ${{ matrix.debian_codename }}
+          BASE_IMAGE: ${{ steps.base.outputs.image }}
         run: |
           set -euo pipefail
 
@@ -94,24 +115,86 @@ jobs:
           full_url=https://hub.docker.com/layers/openproject/postgres/${FULL##*:}
           EOF
 
+      # Nightly runs only rebuild when an input changed: the upstream base image
+      # digest or the pgvector package version. Both are recorded as labels on
+      # the published image and compared here. Pushes to main and manual runs
+      # always rebuild, so changes to the Dockerfile itself get published.
+      - name: Check for changes
+        id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUBLISHED_IMAGE: ${{ steps.tags.outputs.short }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          PGVECTOR_DEBIAN_VERSION: ${{ steps.versions.outputs.pgvector_debian_version }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" != "schedule" ]]; then
+            echo "Triggered by '$EVENT_NAME', building unconditionally."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! CONFIG="$(docker buildx imagetools inspect "$PUBLISHED_IMAGE" --format '{{json .Image}}')"; then
+            echo "Could not inspect $PUBLISHED_IMAGE, assuming it doesn't exist yet."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Single-platform images return the config directly, multi-platform
+          # ones a map of platform => config. Labels are identical across platforms.
+          LABELS="$(jq -c '
+            if has("config") then . else (to_entries | map(select(.key | test("^linux/"))) | .[0].value) end
+            | .config.Labels // {}
+          ' <<< "$CONFIG")"
+
+          PUBLISHED_BASE_DIGEST="$(jq -r '."org.opencontainers.image.base.digest" // empty' <<< "$LABELS")"
+          PUBLISHED_PGVECTOR="$(jq -r '."com.openproject.pgvector.version" // empty' <<< "$LABELS")"
+
+          echo "Base digest:     published='$PUBLISHED_BASE_DIGEST' current='$BASE_DIGEST'"
+          echo "pgvector version: published='$PUBLISHED_PGVECTOR' current='$PGVECTOR_DEBIAN_VERSION'"
+
+          if [[ "$PUBLISHED_BASE_DIGEST" == "$BASE_DIGEST" && "$PUBLISHED_PGVECTOR" == "$PGVECTOR_DEBIAN_VERSION" ]]; then
+            echo "No changes, skipping build."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Inputs changed, building."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build & push image
         id: build
+        if: steps.check.outputs.build == 'true'
         uses: docker/build-push-action@v7.4.0
         with:
           context: .
           push: true
           platforms: ${{ matrix.platforms }}
           build-args: |
+            BASE_IMAGE=${{ steps.base.outputs.image }}
             DEBIAN_CODENAME=${{ matrix.debian_codename }}
             PG_MAJOR=${{ steps.versions.outputs.postgres_major }}
             PGVECTOR_VERSION=${{ steps.versions.outputs.pgvector_debian_version }}
+          labels: |
+            org.opencontainers.image.base.name=docker.io/library/${{ steps.base.outputs.name }}
+            org.opencontainers.image.base.digest=${{ steps.base.outputs.digest }}
+            com.openproject.pgvector.version=${{ steps.versions.outputs.pgvector_debian_version }}
           tags: |
             ${{ steps.tags.outputs.short }}
             ${{ steps.tags.outputs.full }}
 
+      - name: Compile step summary (skipped)
+        if: success() && steps.check.outputs.build == 'false'
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ### No changes for PostgreSQL ${{ matrix.pg_major }}
+
+          Base image \`${{ steps.base.outputs.image }}\` and pgvector \`${{ steps.versions.outputs.pgvector_debian_version }}\`
+          match [\`${{ steps.tags.outputs.short }}\`](${{ steps.tags.outputs.short_url }}). Nothing was pushed.
+          EOF
 
       - name: Compile step summary
-        if: success()
+        if: success() && steps.check.outputs.build == 'true'
         run: |
           cat <<EOF >> "$GITHUB_STEP_SUMMARY"
           ### Published Images
