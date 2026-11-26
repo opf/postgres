@@ -4,10 +4,17 @@ set -euo pipefail
 PG_MAJOR="${PG_MAJOR:-19}"
 DEBIAN_CODENAME="${DEBIAN_CODENAME:-trixie}"
 
-BASE_IMAGE="${BASE_IMAGE:-postgres:${PG_MAJOR}-${DEBIAN_CODENAME}}"
+BASE_IMAGE="postgres:${PG_MAJOR}-${DEBIAN_CODENAME}"
 PACKAGE="postgresql-${PG_MAJOR}-pgvector"
 
-docker run --rm --entrypoint sh "$BASE_IMAGE" -c "
+DIGEST=$(docker buildx imagetools inspect "$BASE_IMAGE" --format '{{.Manifest.Digest}}')
+
+if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+  echo "::error::Could not resolve digest of $BASE_IMAGE (got: '$DIGEST')."
+  exit 1
+fi
+
+docker run --rm --quiet --entrypoint sh "${BASE_IMAGE}@${DIGEST}" -c "
   set -eu
 
   PG_VERSION=\$(postgres --version | awk '{print \$3}')
@@ -25,7 +32,9 @@ docker run --rm --entrypoint sh "$BASE_IMAGE" -c "
   PGVECTOR_VERSION=\$(echo \"\$PGVECTOR_DEBIAN_VERSION\" |
     sed -E 's/^[0-9]+://' | sed -E 's/-[^-]+$//')
 
-  printf '%s %s %s %s\n' \
+  printf '%s %s %s %s %s %s\n' \
+    '$DIGEST' \
+    '$BASE_IMAGE' \
     \"\$PG_VERSION\" \
     '$PG_MAJOR' \
     \"\$PGVECTOR_VERSION\" \
